@@ -293,6 +293,59 @@ exports.getSmartBinBins = async (req, res) => {
   }
 };
 
+exports.getSmartBinsByArea = async (req, res) => {
+  try {
+    const { areaId } = req.params;
+
+    // Buscar el área (soporta area_id o ObjectId)
+    const Area = require('../models/Area');
+    let area;
+    
+    if (areaId.match(/^[0-9a-fA-F]{24}$/)) {
+      area = await Area.findById(areaId);
+    } else {
+      area = await Area.findOne({ area_id: areaId });
+    }
+    
+    if (!area) {
+      return res.status(404).json({
+        error: 'Área no encontrada'
+      });
+    }
+
+    // Buscar devices por el ObjectId del área
+    const devices = await SmartBin.find({ areaId: area._id.toString() })
+      .sort({ createdAt: -1 });
+
+    // Obtener los bins de cada device
+    const devicesWithBins = await Promise.all(
+      devices.map(async (device) => {
+        const bins = await Bin.find({ device_id: device.device_id });
+        return {
+          ...device.toObject(),
+          binsData: bins
+        };
+      })
+    );
+
+    res.status(200).json({
+      count: devicesWithBins.length,
+      data: devicesWithBins,
+      area: {
+        _id: area._id,
+        area_id: area.area_id,
+        name: area.name
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener los dispositivos del área',
+      details: error.message
+    });
+  }
+};
+
+
 // ==========================================
 // MQTT DATA HANDLING
 // ==========================================

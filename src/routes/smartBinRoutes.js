@@ -51,5 +51,16 @@ router.delete('/:id', smartBinController.deleteSmartBin);
  */
 router.get('/:id/bins', smartBinController.getSmartBinBins);
 
+/**
+ * GET /api/devices/area/:area_id
+ * Obtener dispositivos filtrados por área
+ * Ejemplos:
+ * - GET /api/devices/area/dei
+ * - GET /api/devices/area/6926aa7917247905c5ef4554
+ */
+router.get('/area/:areaId', smartBinController.getSmartBinsByArea);
+
+
+
 
 module.exports = router;
