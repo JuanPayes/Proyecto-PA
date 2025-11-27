@@ -2,6 +2,8 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors'); 
+
 const areaRoutes = require('./src/routes/areaRoute');
 const smartBinRoutes = require('./src/routes/smartBinRoutes');
 const binRoutes = require('./src/routes/binRoutes');
@@ -10,7 +12,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors());   
 app.use(express.json());
+
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGO_URI)

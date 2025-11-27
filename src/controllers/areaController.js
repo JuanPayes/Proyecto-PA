@@ -15,7 +15,7 @@ exports.createArea = async (req, res) => {
     }
 
     // Generar area_id automáticamente basado en el nombre
-    const area_id = name.toLowerCase().trim().replace(/\s+/g, '_');
+    const area_id = name.toLowerCase().trim();
 
     // Verificar si el area_id ya existe
     const existingArea = await Area.findOne({ area_id });
