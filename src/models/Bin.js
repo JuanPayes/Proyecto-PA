@@ -15,7 +15,7 @@ const BinSchema = new Schema({
   },
   assigned_type: { 
     type: String, 
-    enum: ['plastic', 'aluminum'], 
+    enum: ['aluminum'], 
     default: null 
   },
   level_percent: { 

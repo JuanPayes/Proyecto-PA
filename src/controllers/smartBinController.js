@@ -1,44 +1,27 @@
-// src/controllers/smartBinController.js
 const SmartBin = require('../models/SmartBin');
 const Bin = require('../models/Bin');
 
-// Función para generar ID único simple (sin necesidad de librería uuid)
 const generateDeviceId = () => {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `device-${timestamp}${random}`;
 };
 
-// ==========================================
-// CREAR SMARTBIN CON SUS 2 BINS AUTOMÁTICAMENTE
-// ==========================================
-
-/**
- * Crear un SmartBin y automáticamente crear sus 2 bins (plastic y aluminum)
- * El usuario solo proporciona: name y areaId
- * Se generan automáticamente: device_id, bin_ids
- * MQTT proporcionará después: client_id_mqtt, last_color, last_proximity, status
- */
 exports.createSmartBin = async (req, res) => {
   try {
-    const { name, areaId } = req.body;
-
-    // Validar campos requeridos
+    const { name, areaId, client_id_mqtt } = req.body;
     if (!name || !areaId) {
       return res.status(400).json({
         error: 'Los campos name y areaId son requeridos'
       });
     }
 
-    // Verificar que el área existe (buscar por area_id o _id)
     const Area = require('../models/Area');
     let area;
 
-    // Si areaId parece ser un ObjectId (24 caracteres hex), buscar por _id
     if (areaId.match(/^[0-9a-fA-F]{24}$/)) {
       area = await Area.findById(areaId);
     } else {
-      // Si no, buscar por area_id (string como "dei")
       area = await Area.findOne({ area_id: areaId });
     }
 
@@ -48,59 +31,45 @@ exports.createSmartBin = async (req, res) => {
       });
     }
 
-    // Generar device_id único automáticamente
     const device_id = generateDeviceId();
 
-    // Crear el SmartBin usando el ObjectId del área
     const newDevice = new SmartBin({
       device_id,
+      client_id_mqtt: client_id_mqtt,
       name,
-      model: 'esp8266', // valor por defecto
-      areaId: area._id.toString(), // Guardar el ObjectId
-      bins: [], // Se llenará después de crear los bins
-      status: 'unknown', // MQTT lo actualizará
+      model: 'esp8266', 
+      areaId: area._id.toString(),
+      status: 'unknown',
       meta: {}
     });
 
     await newDevice.save();
 
-    // Actualizar el área para agregar el device_id
     await Area.findByIdAndUpdate(
       area._id,
       { $addToSet: { devices: device_id } }
     );
 
-    // Crear automáticamente los 2 bins
-    const binTypes = ['plastic', 'aluminum'];
-    const createdBins = [];
+    const bin_id = `${device_id}-aluminum`;
 
-    for (const type of binTypes) {
-      const bin_id = `${device_id}-${type}`;
+    const newBin = new Bin({
+      bin_id,
+      device_id,
+      assigned_type: 'aluminum',
+      level_percent: 0,
+      meta: {}
+    });
 
-      const newBin = new Bin({
-        bin_id,
-        device_id,
-        assigned_type: type,
-        level_percent: 0, // MQTT lo actualizará
-        meta: {}
-      });
+    await newBin.save();
 
-      await newBin.save();
-      createdBins.push(bin_id);
-    }
-
-    // Actualizar el device con los bin_ids creados
-    newDevice.bins = createdBins;
+    newDevice.binId = bin_id;
     await newDevice.save();
 
-    // Obtener los bins creados con sus datos completos
-    const binsData = await Bin.find({ device_id });
-
     res.status(201).json({
-      message: 'SmartBin y bins creados exitosamente',
+      message: 'SmartBin y bin creados exitosamente',
       data: {
         device: newDevice,
-        bins: binsData
+        bin: newBin
       }
     });
   } catch (error) {
@@ -110,10 +79,6 @@ exports.createSmartBin = async (req, res) => {
     });
   }
 };
-
-// ==========================================
-// OBTENER TODOS LOS DEVICES
-// ==========================================
 
 exports.getAllSmartBins = async (req, res) => {
   try {
@@ -127,13 +92,13 @@ exports.getAllSmartBins = async (req, res) => {
     const devices = await SmartBin.find(filter)
       .sort({ createdAt: -1 });
 
-    // Obtener los bins de cada device manualmente
+    // Obtener el bin de cada device manualmente
     const devicesWithBins = await Promise.all(
       devices.map(async (device) => {
-        const bins = await Bin.find({ device_id: device.device_id });
+        const bin = await Bin.findOne({ device_id: device.device_id });
         return {
           ...device.toObject(),
-          binsData: bins
+          binData: bin
         };
       })
     );
@@ -150,10 +115,6 @@ exports.getAllSmartBins = async (req, res) => {
   }
 };
 
-// ==========================================
-// OBTENER UN DEVICE POR ID
-// ==========================================
-
 exports.getSmartBinById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -166,13 +127,12 @@ exports.getSmartBinById = async (req, res) => {
       });
     }
 
-    // Obtener los bins del device
-    const bins = await Bin.find({ device_id: id });
+    const bin = await Bin.findOne({ device_id: id });
 
     res.status(200).json({
       data: {
         ...device.toObject(),
-        binsData: bins
+        binData: bin
       }
     });
   } catch (error) {
@@ -182,10 +142,6 @@ exports.getSmartBinById = async (req, res) => {
     });
   }
 };
-
-// ==========================================
-// ACTUALIZAR DEVICE
-// ==========================================
 
 exports.updateSmartBin = async (req, res) => {
   try {
@@ -219,10 +175,6 @@ exports.updateSmartBin = async (req, res) => {
   }
 };
 
-// ==========================================
-// ELIMINAR DEVICE Y SUS BINS
-// ==========================================
-
 exports.deleteSmartBin = async (req, res) => {
   try {
     const { id } = req.params;
@@ -235,24 +187,21 @@ exports.deleteSmartBin = async (req, res) => {
       });
     }
 
-    // Eliminar todos los bins asociados
-    await Bin.deleteMany({ device_id: id });
+    const deletedBin = await Bin.findOneAndDelete({ device_id: id });
 
-    // Remover el device_id del área
     const Area = require('../models/Area');
     await Area.findByIdAndUpdate(
       device.areaId,
       { $pull: { devices: id } }
     );
 
-    // Eliminar el device
     await SmartBin.findOneAndDelete({ device_id: id });
 
     res.status(200).json({
-      message: 'Dispositivo y sus bins eliminados exitosamente',
+      message: 'Dispositivo y su bin eliminados exitosamente',
       data: {
         device_id: id,
-        bins_deleted: device.bins.length
+        bin_deleted: deletedBin ? true : false
       }
     });
   } catch (error) {
@@ -263,11 +212,7 @@ exports.deleteSmartBin = async (req, res) => {
   }
 };
 
-// ==========================================
-// OBTENER BINS DE UN DEVICE
-// ==========================================
-
-exports.getSmartBinBins = async (req, res) => {
+exports.getSmartBinBin = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -279,15 +224,20 @@ exports.getSmartBinBins = async (req, res) => {
       });
     }
 
-    const bins = await Bin.find({ device_id: id }).sort({ assigned_type: 1 });
+    const bin = await Bin.findOne({ device_id: id });
+
+    if (!bin) {
+      return res.status(404).json({
+        error: 'Bin no encontrado para este dispositivo'
+      });
+    }
 
     res.status(200).json({
-      count: bins.length,
-      data: bins
+      data: bin
     });
   } catch (error) {
     res.status(500).json({
-      error: 'Error al obtener los bins del dispositivo',
+      error: 'Error al obtener el bin del dispositivo',
       details: error.message
     });
   }
@@ -297,7 +247,6 @@ exports.getSmartBinsByArea = async (req, res) => {
   try {
     const { areaId } = req.params;
 
-    // Buscar el área (soporta area_id o ObjectId)
     const Area = require('../models/Area');
     let area;
     
@@ -313,17 +262,15 @@ exports.getSmartBinsByArea = async (req, res) => {
       });
     }
 
-    // Buscar devices por el ObjectId del área
     const devices = await SmartBin.find({ areaId: area._id.toString() })
       .sort({ createdAt: -1 });
 
-    // Obtener los bins de cada device
     const devicesWithBins = await Promise.all(
       devices.map(async (device) => {
-        const bins = await Bin.find({ device_id: device.device_id });
+        const bin = await Bin.findOne({ device_id: device.device_id });
         return {
           ...device.toObject(),
-          binsData: bins
+          binData: bin
         };
       })
     );
@@ -345,20 +292,6 @@ exports.getSmartBinsByArea = async (req, res) => {
   }
 };
 
-
-// ==========================================
-// MQTT DATA HANDLING
-// ==========================================
-
-/**
- * Actualizar estado de conexión del dispositivo (para MQTT)
- * Payload esperado:
- * {
- *   status: "online" | "offline",
- *   client_id_mqtt: "esp8266_abc123",
- *   timestamp: "2024-11-25T10:30:00Z"
- * }
- */
 exports.updateSmartBinStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -372,7 +305,6 @@ exports.updateSmartBinStatus = async (req, res) => {
       });
     }
 
-    // Actualizar status y client_id_mqtt
     if (status) {
       device.status = status;
     }
@@ -381,7 +313,6 @@ exports.updateSmartBinStatus = async (req, res) => {
       device.client_id_mqtt = client_id_mqtt;
     }
 
-    // Actualizar meta con timestamp
     if (timestamp) {
       device.meta = {
         ...device.meta,
@@ -493,9 +424,90 @@ exports.updateSmartBinProximity = async (req, res) => {
   }
 };
 
-/**
- * Método auxiliar para procesar datos MQTT del dispositivo (sin HTTP response)
- */
+exports.getDeviceStatus = async (req, res) => {
+  try {
+    const { device_id } = req.params;
+    const device = await SmartBin.findOne({ device_id })
+      .populate('bin_id', 'bin_id level_percent');
+
+    if (!device) {
+      return res.status(404).json({
+        error: 'Device no encontrado'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        device_id: device.device_id,
+        status: device.status,
+        last_color: device.last_color,
+        last_proximity: device.last_proximity,
+        bin: device.bin_id,
+        last_seen: device.updatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener estado del device',
+      details: error.message
+    });
+  }
+};
+
+exports.getDeviceProximity = async (req, res) => {
+  try {
+    const { device_id } = req.params;
+    const device = await SmartBin.findOne({ device_id });
+
+    if (!device) {
+      return res.status(404).json({
+        error: 'Device no encontrado'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        device_id: device.device_id,
+        proximity: device.last_proximity || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener proximidad del device',
+      details: error.message
+    });
+  }
+};
+
+exports.getDeviceColor = async (req, res) => {
+  try {
+    const { device_id } = req.params;
+    const device = await SmartBin.findOne({ device_id });
+
+    if (!device) {
+      return res.status(404).json({
+        error: 'Device no encontrado'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        device_id: device.device_id,
+        color: device.last_color || null
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener color del device',
+      details: error.message
+    });
+  }
+};
+
+
 exports.processMqttSmartBinData = async (device_id, data) => {
   try {
     const device = await SmartBin.findOne({ device_id });

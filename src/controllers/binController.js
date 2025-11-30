@@ -1,11 +1,5 @@
-// src/controllers/binController.js
 const Bin = require('../models/Bin');
 const Device = require('../models/SmartBin');
-
-// ==========================================
-// NOTA: Los bins se crean automáticamente cuando se crea un SmartBin
-// Este controlador solo maneja consultas y actualizaciones vía MQTT
-// ==========================================
 
 // Obtener todos los bins (con filtro opcional por device_id)
 exports.getAllBins = async (req, res) => {
@@ -55,7 +49,31 @@ exports.getBinById = async (req, res) => {
   }
 };
 
-// Eliminar un bin específico (opcional, normalmente se eliminan con el device)
+// Obtener el bin asociado a un device_id específico
+exports.getBinByDeviceId = async (req, res) => {
+  try {
+    const { device_id } = req.params;
+
+    const bin = await Bin.findOne({ device_id });
+
+    if (!bin) {
+      return res.status(404).json({
+        error: 'Bin no encontrado para este dispositivo'
+      });
+    }
+
+    res.status(200).json({
+      data: bin
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener el bin del dispositivo',
+      details: error.message
+    });
+  }
+};
+
+// Eliminar un bin específico
 exports.deleteBin = async (req, res) => {
   try {
     const { id } = req.params;
@@ -67,10 +85,10 @@ exports.deleteBin = async (req, res) => {
       });
     }
 
-    // Remover el bin del device
+    // Limpiar la referencia en el device
     await Device.findOneAndUpdate(
       { device_id: bin.device_id },
-      { $pull: { bins: id } }
+      { $unset: { binId: "" } }
     );
 
     await Bin.findOneAndDelete({ bin_id: id });
@@ -97,7 +115,7 @@ exports.deleteBin = async (req, res) => {
  * 
  * Payload esperado del MQTT:
  * {
- *   bin_id: "device-abc123-plastic",
+ *   bin_id: "device-abc123-aluminum",
  *   level_percent: 75.5,
  *   timestamp: "2024-11-25T10:30:00Z"
  * }
@@ -129,7 +147,7 @@ exports.updateBinLevel = async (req, res) => {
     }
 
     // Actualizar el bin directamente con el valor recibido de MQTT
-    bin.level_percent = Math.round(level_percent * 100) / 100; // Redondear a 2 decimales
+    bin.level_percent = Math.round(level_percent * 100) / 100;
 
     // Actualizar meta con el timestamp si se proporciona
     if (timestamp) {
@@ -158,10 +176,77 @@ exports.updateBinLevel = async (req, res) => {
   }
 };
 
-/**
- * Método auxiliar para procesar datos MQTT (sin HTTP response)
- * Usar este método cuando los datos lleguen directamente del broker MQTT
- */
+
+exports.getBinLevel = async (req, res) => {
+  try {
+    const { bin_id } = req.params;
+    const bin = await Bin.findOne({ bin_id });
+
+    if (!bin) {
+      return res.status(404).json({
+        error: 'Bin no encontrado'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        bin_id: bin.bin_id,
+        level_percent: bin.level_percent,
+        status: bin.level_percent >= 80 ? 'nearly_full' : 
+                bin.level_percent >= 50 ? 'half_full' : 'available',
+        last_update: bin.meta?.last_update || bin.updatedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener nivel del bin',
+      details: error.message
+    });
+  }
+};
+
+exports.getBinsByStatus = async (req, res) => {
+  try {
+    const { status } = req.params;
+    
+    let query = {};
+    
+    // Filtrar por nivel según el estado
+    switch(status) {
+      case 'nearly_full':
+        query.level_percent = { $gte: 80 };
+        break;
+      case 'half_full':
+        query.level_percent = { $gte: 50, $lt: 80 };
+        break;
+      case 'available':
+        query.level_percent = { $lt: 50 };
+        break;
+      default:
+        return res.status(400).json({
+          error: 'Estado inválido. Use: nearly_full, half_full, available'
+        });
+    }
+
+    const bins = await Bin.find(query)
+      .populate('area_id', 'name')
+      .sort({ level_percent: -1 });
+
+    res.status(200).json({
+      success: true,
+      status: status,
+      count: bins.length,
+      data: bins
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Error al obtener bins por estado',
+      details: error.message
+    });
+  }
+};
+
 exports.processMqttData = async (bin_id, level_percent, timestamp = null) => {
   try {
     const bin = await Bin.findOne({ bin_id });

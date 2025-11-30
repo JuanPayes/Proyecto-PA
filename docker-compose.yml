@@ -11,19 +11,18 @@ services:
     volumes:
       - mongo-data:/data/db
     ports:
-      - "27017:27017"   # opcional: solo si quieres acceder desde el host
+      - "27017:27017"
 
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: mosquitto
     restart: unless-stopped
     volumes:
-      - ./config:/mosquitto/config
-      - ./data:/mosquitto/data
-      - ./log:/mosquitto/log
+        - ./mosquitto/config:/mosquitto/config
+        - ./mosquitto/data:/mosquitto/data
+        - ./mosquitto/log:/mosquitto/log
     ports:
       - "1884:1883"
       - "9001:9001"
-
 volumes:
   mongo-data:

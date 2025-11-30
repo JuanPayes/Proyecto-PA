@@ -19,10 +19,7 @@ const SmartBinSchema = new Schema({
     default: 'esp8266' 
   },
   areaId: { type: String },
-  bins: [{
-    type: String,
-    ref: 'Bin'
-  }],
+  binId: { type: String },
   status: { 
     type: String, 
     enum: ['online', 'offline', 'unknown'], 
