@@ -1,14 +1,11 @@
-// src/app.js
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 
-// Importar cliente MQTT
 const mqttClient = require('./src/mqtt/mqttClient');
 const mqttConfig = require('./src/mqtt/mqttConfig');
 
-// Importar rutas
 const areaRoutes = require('./src/routes/areaRoute');
 const smartBinRoutes = require('./src/routes/smartBinRoutes');
 const binRoutes = require('./src/routes/binRoutes');
@@ -16,11 +13,9 @@ const binRoutes = require('./src/routes/binRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());   
 app.use(express.json());
 
-// Rutas principales
 app.use('/api/areas', areaRoutes);
 app.use('/api/devices', smartBinRoutes);
 app.use('/api/bins', binRoutes);
@@ -32,7 +27,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Ruta para ver mensajes MQTT recientes
 app.get('/api/mqtt/messages', (req, res) => {
   res.json({
     connected: mqttClient.isConnected(),
@@ -40,7 +34,6 @@ app.get('/api/mqtt/messages', (req, res) => {
   });
 });
 
-// Ruta para publicar mensajes MQTT manualmente (útil para pruebas)
 app.post('/api/mqtt/publish', (req, res) => {
   const { topic, message } = req.body;
   
@@ -68,12 +61,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Conectar a MongoDB primero, luego a MQTT
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ Conectado a MongoDB');
     
-    // ====== CONECTAR A MQTT DESPUÉS DE MONGODB ======
     console.log('\n🔌 Iniciando conexión MQTT...');
     
     mqttClient.connect(
@@ -82,30 +73,23 @@ mongoose.connect(process.env.MONGO_URI)
       mqttConfig.topics
     );
 
-    // Opcional: Registrar handlers personalizados
     mqttClient.registerHandler('/test/comment', (payload, topic) => {
       console.log('💬 Comentario recibido:', payload);
-      // Aquí puedes agregar lógica adicional
     });
 
-    // Iniciar servidor HTTP
     const server = app.listen(PORT, () => {
       console.log(`\n🚀 Servidor corriendo en http://localhost:${PORT}`);
       console.log(`📡 Estado MQTT: ${mqttClient.isConnected() ? 'Conectado' : 'Esperando conexión...'}`);
     });
 
-    // ====== MANEJO DE CIERRE GRACEFUL ======
     const gracefulShutdown = () => {
       console.log('\n👋 Cerrando aplicación...');
       
-      // Desconectar MQTT
       mqttClient.disconnect();
       
-      // Cerrar servidor HTTP
       server.close(() => {
         console.log('✅ Servidor HTTP cerrado');
         
-        // Cerrar conexión MongoDB
         mongoose.connection.close(false, () => {
           console.log('✅ Conexión MongoDB cerrada');
           console.log('✅ Aplicación cerrada correctamente');
@@ -114,9 +98,8 @@ mongoose.connect(process.env.MONGO_URI)
       });
     };
 
-    // Escuchar señales de cierre
-    process.on('SIGINT', gracefulShutdown);  // Ctrl+C
-    process.on('SIGTERM', gracefulShutdown); // Kill
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
   })
   .catch(err => {
     console.error('❌ Error conectando a MongoDB:', err);

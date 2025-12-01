@@ -2,22 +2,18 @@ const Area = require('../models/Area');
 const SmartBin = require('../models/SmartBin');
 const Bin = require('../models/Bin');
 
-// Crear una nueva área - el front solo envía el nombre
 exports.createArea = async (req, res) => {
   try {
     const { name } = req.body;
 
-    // Validar campo requerido
     if (!name) {
       return res.status(400).json({
         error: 'El campo name es requerido'
       });
     }
 
-    // Generar area_id automáticamente basado en el nombre
     const area_id = name.toLowerCase().trim();
 
-    // Verificar si el area_id ya existe
     const existingArea = await Area.findOne({ area_id });
     if (existingArea) {
       return res.status(409).json({
@@ -25,11 +21,10 @@ exports.createArea = async (req, res) => {
       });
     }
 
-    // Crear área solo con nombre, devices será array vacío por defecto
     const newArea = new Area({
       area_id,
       name,
-      devices: [] // Siempre inicia vacío
+      devices: []
     });
 
     await newArea.save();
@@ -46,7 +41,6 @@ exports.createArea = async (req, res) => {
   }
 };
 
-// Obtener todas las áreas
 exports.getAllAreas = async (req, res) => {
   try {
     const areas = await Area.find().sort({ createdAt: -1 });
@@ -63,20 +57,17 @@ exports.getAllAreas = async (req, res) => {
   }
 };
 
-// Actualizar área - solo edita el nombre
 exports.updateArea = async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
 
-    // Validar que se envíe el nombre
     if (!name) {
       return res.status(400).json({
         error: 'El campo name es requerido'
       });
     }
 
-    // Solo actualizar el nombre
     const updatedArea = await Area.findOneAndUpdate(
       { area_id: id },
       { name: name.trim() },
@@ -101,12 +92,10 @@ exports.updateArea = async (req, res) => {
   }
 };
 
-// Eliminar un área por area_id y todos sus SmartBins y Bins asociados
 exports.deleteArea = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Buscar el área
     const area = await Area.findOne({ area_id: id });
 
     if (!area) {
@@ -115,24 +104,19 @@ exports.deleteArea = async (req, res) => {
       });
     }
 
-    // Encontrar todos los SmartBins asociados a esta área (usando el ObjectId)
     const smartBins = await SmartBin.find({ areaId: area._id.toString() });
 
     let deletedDevices = 0;
     let deletedBins = 0;
 
-    // Eliminar cada SmartBin y sus bins asociados
     for (const device of smartBins) {
-      // Eliminar todos los bins del device
       const binsDeleteResult = await Bin.deleteMany({ device_id: device.device_id });
       deletedBins += binsDeleteResult.deletedCount;
 
-      // Eliminar el device
       await SmartBin.findOneAndDelete({ device_id: device.device_id });
       deletedDevices++;
     }
 
-    // Finalmente, eliminar el área
     await Area.findOneAndDelete({ area_id: id });
 
     res.status(200).json({

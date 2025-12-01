@@ -1,14 +1,14 @@
 const mqtt = require('mqtt');
 const binController = require('../controllers/binController');
 const deviceController = require('../controllers/smartBinController');
-const SmartBin = require('../models/SmartBin'); // ⬅️ IMPORTANTE: Agregar
+const SmartBin = require('../models/SmartBin');
 
 class MqttClient {
   constructor() {
     this.client = null;
     this.connected = false;
     this.messages = {};
-    this.messageHandlers = {}; // Handlers personalizados por topic
+    this.messageHandlers = {}; 
   }
 
   connect(brokerUrl, options = {}, topics = []) {
@@ -114,7 +114,6 @@ class MqttClient {
 
       console.log(`📥 [${topic}] ${messageStr}`);
 
-      // Parsear JSON
       let parsedMessage;
       try {
         parsedMessage = JSON.parse(messageStr);
@@ -123,13 +122,11 @@ class MqttClient {
         return;
       }
 
-      // Ejecutar handler personalizado si existe
       if (this.messageHandlers[topic]) {
         await this.messageHandlers[topic](parsedMessage, topic);
         return;
       }
 
-      // Routing automático
       await this.routeMessage(topic, parsedMessage);
 
     } catch (error) {
@@ -139,13 +136,9 @@ class MqttClient {
 
   async routeMessage(topic, payload) {
     try {
-      // ========================================
-      // COLOR DETECTADO: /smartbin/color
-      // ========================================
       if (topic === '/smartbin/color') {
         const { client_id_mqtt, classification, confidence, rgb } = payload;
         
-        // Validar que venga el client_id_mqtt
         if (!client_id_mqtt) {
           console.error('⚠️  Color recibido sin client_id_mqtt');
           return;
@@ -158,7 +151,6 @@ class MqttClient {
           rgb
         });
 
-        // Buscar el device por client_id_mqtt
         const device = await SmartBin.findOne({ client_id_mqtt });
         
         if (!device) {
@@ -167,7 +159,6 @@ class MqttClient {
           return;
         }
 
-        // Actualizar usando el device_id interno
         const result = await deviceController.processMqttSmartBinData(device.device_id, {
           color: {
             classification,
@@ -183,11 +174,8 @@ class MqttClient {
         }
       }
 
-      // ========================================
-      // PROXIMIDAD: /smartbin/proximity
-      // ========================================
       else if (topic === '/smartbin/proximity') {
-        const { client_id_mqtt, distance_cm, trigger } = payload;
+        const { client_id_mqtt, distance_cm, triggaer } = payload;
         
         if (!client_id_mqtt) {
           console.error('⚠️  Proximidad recibida sin client_id_mqtt');
@@ -200,7 +188,6 @@ class MqttClient {
           trigger
         });
 
-        // Buscar el device por client_id_mqtt
         const device = await SmartBin.findOne({ client_id_mqtt });
         
         if (!device) {
@@ -223,9 +210,6 @@ class MqttClient {
         }
       }
 
-      // ========================================
-      // NIVEL DE LLENADO: /smartbin/level
-      // ========================================
       else if (topic === '/smartbin/level') {
         const { client_id_mqtt, level_percent } = payload;
         
@@ -239,7 +223,6 @@ class MqttClient {
           level_percent
         });
 
-        // Buscar el device por client_id_mqtt para obtener el binId
         const device = await SmartBin.findOne({ client_id_mqtt });
         
         if (!device) {
@@ -254,7 +237,6 @@ class MqttClient {
           return;
         }
 
-        // Actualizar el bin usando binId
         const result = await binController.processMqttData(device.binId, level_percent);
         
         if (result.success) {
@@ -264,16 +246,10 @@ class MqttClient {
         }
       }
 
-      // ========================================
-      // TOPIC DE PRUEBA
-      // ========================================
       else if (topic === '/test/comment') {
         console.log('💬 Comentario recibido:', payload);
       }
 
-      // ========================================
-      // TOPIC NO RECONOCIDO
-      // ========================================
       else {
         console.log('⚠️  Topic no reconocido:', topic);
         console.log('📋 Topics disponibles: /smartbin/color, /smartbin/proximity, /smartbin/level');
@@ -312,7 +288,6 @@ class MqttClient {
   }
 }
 
-// Crear instancia singleton
 const mqttClient = new MqttClient();
 
 module.exports = mqttClient;

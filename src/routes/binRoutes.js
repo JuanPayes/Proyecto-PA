@@ -9,8 +9,6 @@ router.delete('/:bin_id', binController.deleteBin);
 // Endpoints específicos para nivel (MQTT)
 router.post('/:bin_id/level', binController.updateBinLevel);
 router.get('/:bin_id/level', binController.getBinLevel);
-
-// Endpoints para filtros útiles
 router.get('/status/:status', binController.getBinsByStatus);
 
 module.exports = router;

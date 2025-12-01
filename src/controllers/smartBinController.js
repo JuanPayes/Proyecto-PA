@@ -92,7 +92,6 @@ exports.getAllSmartBins = async (req, res) => {
     const devices = await SmartBin.find(filter)
       .sort({ createdAt: -1 });
 
-    // Obtener el bin de cada device manualmente
     const devicesWithBins = await Promise.all(
       devices.map(async (device) => {
         const bin = await Bin.findOne({ device_id: device.device_id });
@@ -156,7 +155,6 @@ exports.updateSmartBin = async (req, res) => {
       });
     }
 
-    // Actualizar solo los campos permitidos
     if (name) device.name = name;
     if (areaId) device.areaId = areaId;
     if (meta) device.meta = { ...device.meta, ...meta };
@@ -338,16 +336,6 @@ exports.updateSmartBinStatus = async (req, res) => {
   }
 };
 
-/**
- * Actualizar datos de color detectado (para MQTT)
- * Payload esperado:
- * {
- *   classification: "plastic",
- *   confidence: 0.95,
- *   rgb: [255, 0, 0],
- *   timestamp: "2024-11-25T10:30:00Z"
- * }
- */
 exports.updateSmartBinColor = async (req, res) => {
   try {
     const { id } = req.params;
@@ -382,15 +370,6 @@ exports.updateSmartBinColor = async (req, res) => {
   }
 };
 
-/**
- * Actualizar datos de proximidad (para MQTT)
- * Payload esperado:
- * {
- *   distance_cm: 15.5,
- *   trigger: true,
- *   timestamp: "2024-11-25T10:30:00Z"
- * }
- */
 exports.updateSmartBinProximity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -517,7 +496,6 @@ exports.processMqttSmartBinData = async (device_id, data) => {
       return { success: false, error: 'Device no encontrado' };
     }
 
-    // Actualizar según el tipo de datos recibidos
     if (data.status) {
       device.status = data.status;
     }

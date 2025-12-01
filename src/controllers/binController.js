@@ -1,7 +1,6 @@
 const Bin = require('../models/Bin');
 const Device = require('../models/SmartBin');
 
-// Obtener todos los bins (con filtro opcional por device_id)
 exports.getAllBins = async (req, res) => {
   try {
     const { device_id } = req.query;
@@ -25,7 +24,6 @@ exports.getAllBins = async (req, res) => {
   }
 };
 
-// Obtener un bin específico por bin_id
 exports.getBinById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -49,7 +47,6 @@ exports.getBinById = async (req, res) => {
   }
 };
 
-// Obtener el bin asociado a un device_id específico
 exports.getBinByDeviceId = async (req, res) => {
   try {
     const { device_id } = req.params;
@@ -73,7 +70,6 @@ exports.getBinByDeviceId = async (req, res) => {
   }
 };
 
-// Eliminar un bin específico
 exports.deleteBin = async (req, res) => {
   try {
     const { id } = req.params;
@@ -85,7 +81,6 @@ exports.deleteBin = async (req, res) => {
       });
     }
 
-    // Limpiar la referencia en el device
     await Device.findOneAndUpdate(
       { device_id: bin.device_id },
       { $unset: { binId: "" } }
@@ -105,33 +100,16 @@ exports.deleteBin = async (req, res) => {
   }
 };
 
-// ==========================================
-// MQTT DATA HANDLING
-// ==========================================
-
-/**
- * Actualizar nivel del bin basado en datos MQTT
- * Este método será llamado cuando lleguen datos del sensor vía MQTT
- * 
- * Payload esperado del MQTT:
- * {
- *   bin_id: "device-abc123-aluminum",
- *   level_percent: 75.5,
- *   timestamp: "2024-11-25T10:30:00Z"
- * }
- */
 exports.updateBinLevel = async (req, res) => {
   try {
     const { bin_id, level_percent, timestamp } = req.body;
 
-    // Validar datos requeridos
     if (!bin_id || level_percent === undefined) {
       return res.status(400).json({
         error: 'Se requieren bin_id y level_percent'
       });
     }
 
-    // Validar que level_percent esté en el rango válido
     if (level_percent < 0 || level_percent > 100) {
       return res.status(400).json({
         error: 'level_percent debe estar entre 0 y 100'
@@ -146,10 +124,8 @@ exports.updateBinLevel = async (req, res) => {
       });
     }
 
-    // Actualizar el bin directamente con el valor recibido de MQTT
     bin.level_percent = Math.round(level_percent * 100) / 100;
 
-    // Actualizar meta con el timestamp si se proporciona
     if (timestamp) {
       bin.meta = {
         ...bin.meta,
@@ -255,16 +231,13 @@ exports.processMqttData = async (bin_id, level_percent, timestamp = null) => {
       return { success: false, error: 'Bin no encontrado' };
     }
 
-    // Validar rango
     if (level_percent < 0 || level_percent > 100) {
       console.error(`level_percent fuera de rango: ${level_percent}`);
       return { success: false, error: 'level_percent fuera de rango' };
     }
 
-    // Actualizar directamente con el valor de MQTT
     bin.level_percent = Math.round(level_percent * 100) / 100;
 
-    // Actualizar meta con timestamp
     if (timestamp) {
       bin.meta = {
         ...bin.meta,
